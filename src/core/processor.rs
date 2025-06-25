@@ -140,6 +140,41 @@ impl Processor {
         Ok(x)
     }
 
+    pub fn process_images_immutable(&self, xs: &[Image]) -> Result<(X, Vec<ImageTransformInfo>)> {
+        let mut images_transform_info = vec![];
+        let mut x = if self.pad_image {
+            if xs.len() != 1 {
+                anyhow::bail!("When pad_image is true, only one image is allowed.");
+            }
+            let (image, images_transform_info_) = xs[0].pad(self.pad_size)?;
+            images_transform_info.push(images_transform_info_);
+            Image::from(image).to_ndarray()?.insert_axis(0)?
+        } else if self.do_resize {
+            let (x, images_transform_info_) = self.par_resize(xs)?;
+            images_transform_info = images_transform_info_;
+            x
+        } else {
+            anyhow::bail!(
+                "When pad_image and do_resize are both false, at least one image is required."
+            );
+        };
+
+        if self.do_normalize {
+            x = x.normalize(0., 255.)?;
+        }
+        if !self.image_std.is_empty() && !self.image_mean.is_empty() {
+            x = x.standardize(&self.image_mean, &self.image_std, 3)?;
+        }
+        if self.nchw {
+            x = x.nhwc2nchw()?;
+        }
+        if self.unsigned {
+            x = x.unsigned();
+        }
+
+        Ok((x, images_transform_info))
+    }
+
     pub fn par_resize(&self, xs: &[Image]) -> Result<(X, Vec<ImageTransformInfo>)> {
         match xs.len() {
             0 => anyhow::bail!("Found no input images."),
