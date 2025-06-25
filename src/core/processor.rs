@@ -1,5 +1,6 @@
 use aksr::Builder;
 use anyhow::Result;
+use image::DynamicImage;
 use ndarray::{s, Array};
 use rayon::prelude::*;
 use std::sync::Mutex;
@@ -140,8 +141,9 @@ impl Processor {
         Ok(x)
     }
 
-    pub fn process_images_immutable(&self, xs: &[Image]) -> Result<(X, Vec<ImageTransformInfo>)> {
+    pub fn process_images_immutable(&self, xs: &[DynamicImage]) -> Result<(X, Vec<ImageTransformInfo>)> {
         let mut images_transform_info = vec![];
+        let xs: Vec<Image> = xs.iter().cloned().map(Image::from).collect();
         let mut x = if self.pad_image {
             if xs.len() != 1 {
                 anyhow::bail!("When pad_image is true, only one image is allowed.");
@@ -150,7 +152,7 @@ impl Processor {
             images_transform_info.push(images_transform_info_);
             Image::from(image).to_ndarray()?.insert_axis(0)?
         } else if self.do_resize {
-            let (x, images_transform_info_) = self.par_resize(xs)?;
+            let (x, images_transform_info_) = self.par_resize(&xs)?;
             images_transform_info = images_transform_info_;
             x
         } else {
